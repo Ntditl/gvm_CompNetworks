@@ -18,21 +18,21 @@ class Application(tk.Tk):
         super().__init__()
         self.title("Network Management App")
 
-        # --- Настройки Canvas ---
+        # Параметры Canvas
         self.canvas_width = 800
         self.canvas_height = 600
         self.center_x = self.canvas_width // 2
         self.center_y = self.canvas_height // 2
-        self.SCALE = 4.0  # масштаб логических координат по умолчанию
+        self.SCALE = 4.0
 
-        # --- Основные данные ---
+        # Основные данные
         self.routers = []
         self.nodes = []
         self.connections = []
         self.traffic_matrix = TrafficMatrix()
         self.cables = []
 
-        # Глобальный packet_size (по умолчанию 128)
+        # Глобальный packet_size
         self.global_packet_size = 128.0
 
         # Пример начальных данных
@@ -41,11 +41,10 @@ class Application(tk.Tk):
         self.cables.append(Cable("DefaultCable", 1.0, 1000))
         self.cables.append(Cable("HighSpeedCable", 2.0, 10000))
 
-        # --- Интерфейс ---
+        # ---------- Интерфейс ----------
         main_frame = ttk.Frame(self)
         main_frame.pack(fill=tk.BOTH, expand=True)
 
-        # Верхняя панель кнопок
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(side=tk.TOP, fill=tk.X, pady=5)
 
@@ -58,7 +57,10 @@ class Application(tk.Tk):
         ttk.Button(btn_frame, text="Показать соединения", command=self.show_connections_dialog).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Мин. роутер/кабель", command=self.compute_min_resources).pack(side=tk.LEFT, padx=5)
 
-        # Новая кнопка для изменения глобального packet_size
+        # Новая кнопка «Полносвязный граф»
+        ttk.Button(btn_frame, text="Полносвязный граф", command=self.make_complete_graph).pack(side=tk.LEFT, padx=5)
+
+        # Кнопка Packet Size
         ttk.Button(btn_frame, text="Packet Size", command=self.show_packet_size_dialog).pack(side=tk.LEFT, padx=5)
 
         ttk.Button(btn_frame, text="Сохранить", command=self.save_data).pack(side=tk.LEFT, padx=5)
@@ -78,9 +80,45 @@ class Application(tk.Tk):
         self.scale_entry.pack(side=tk.LEFT, padx=5)
         ttk.Button(bottom_frame, text="Применить", command=self.apply_scale).pack(side=tk.LEFT, padx=5)
 
-        # Рисуем изначальную сетку
         self.draw_centered_grid()
 
+    # --------------------------------------------------------------------------
+    # Новый метод: сделать полносвязный граф
+    def make_complete_graph(self):
+        if len(self.nodes) < 2:
+            messagebox.showinfo("Полносвязный граф", "Недостаточно узлов для полносвязной сети.")
+            return
+
+        if not self.cables:
+            messagebox.showinfo("Полносвязный граф", "Нет ни одного кабеля! Добавьте кабель.")
+            return
+
+        # Возьмём, к примеру, первый кабель из списка (или любой другой)
+        cable_for_all = self.cables[0]
+
+        # Создадим множество "frozenset({node1, node2})" для уже существующих соединений
+        existing_pairs = set()
+        for c in self.connections:
+            pair = frozenset([c.node1, c.node2])
+            existing_pairs.add(pair)
+
+        # Перебираем все пары узлов
+        new_count = 0
+        for i in range(len(self.nodes)):
+            for j in range(i+1, len(self.nodes)):
+                n1 = self.nodes[i]
+                n2 = self.nodes[j]
+                pair = frozenset([n1, n2])
+                if pair not in existing_pairs:
+                    # Создаём новое соединение
+                    conn_name = f"auto_{n1.name}_{n2.name}"
+                    new_conn = Connection(conn_name, n1, n2, cable_for_all)
+                    self.connections.append(new_conn)
+                    new_count += 1
+
+        self.draw_centered_grid()
+        messagebox.showinfo("Полносвязный граф",
+                            f"Добавлено {new_count} новых соединений (использован кабель '{cable_for_all.cable_name}').")
     # --------------------------------------------------------------------------
     # Диалог для изменения глобального packet_size
     def show_packet_size_dialog(self):
