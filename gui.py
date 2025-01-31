@@ -1,4 +1,3 @@
-# gui.py
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
@@ -33,6 +32,9 @@ class Application(tk.Tk):
         self.traffic_matrix = TrafficMatrix()
         self.cables = []
 
+        # Глобальный packet_size (по умолчанию 128)
+        self.global_packet_size = 128.0
+
         # Пример начальных данных
         default_router = Router("testNode", 9999999, 100)
         self.routers.append(default_router)
@@ -55,6 +57,10 @@ class Application(tk.Tk):
         ttk.Button(btn_frame, text="Показать узлы", command=self.show_nodes_dialog).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Показать соединения", command=self.show_connections_dialog).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Мин. роутер/кабель", command=self.compute_min_resources).pack(side=tk.LEFT, padx=5)
+
+        # Новая кнопка для изменения глобального packet_size
+        ttk.Button(btn_frame, text="Packet Size", command=self.show_packet_size_dialog).pack(side=tk.LEFT, padx=5)
+
         ttk.Button(btn_frame, text="Сохранить", command=self.save_data).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Загрузить", command=self.load_data).pack(side=tk.LEFT, padx=5)
 
@@ -74,6 +80,29 @@ class Application(tk.Tk):
 
         # Рисуем изначальную сетку
         self.draw_centered_grid()
+
+    # --------------------------------------------------------------------------
+    # Диалог для изменения глобального packet_size
+    def show_packet_size_dialog(self):
+        dialog = tk.Toplevel(self)
+        dialog.title("Глобальный Packet Size")
+
+        tk.Label(dialog, text="Packet Size:").pack(padx=10, pady=10)
+        entry = tk.Entry(dialog)
+        entry.insert(0, str(self.global_packet_size))
+        entry.pack(padx=10, pady=5)
+
+        def on_confirm():
+            try:
+                val = float(entry.get())
+                if val <= 0:
+                    raise ValueError
+                self.global_packet_size = val
+                dialog.destroy()
+            except ValueError:
+                messagebox.showerror("Ошибка", "Некорректное значение Packet Size (> 0).")
+
+        ttk.Button(dialog, text="OK", command=on_confirm).pack(pady=10)
 
     # --------------------------------------------------------------------------
     # Рисование на Canvas
@@ -128,7 +157,7 @@ class Application(tk.Tk):
             messagebox.showerror("Ошибка", "Некорректное значение масштаба (должно быть > 0).")
 
     # --------------------------------------------------------------------------
-    # Добавление узла (оставляем без изменений)
+    # Добавление узла
 
     def add_node_dialog(self):
         """Окно диалога для добавления нового узла."""
@@ -154,7 +183,6 @@ class Application(tk.Tk):
         router_tree.heading("cost", text="Стоимость")
         router_tree.grid(row=3, column=1, padx=5, pady=5)
 
-        # Заполняем таблицу роутеров
         for r in self.routers:
             router_tree.insert("", tk.END, values=(r.model_name, r.capacity, r.cost))
 
@@ -165,7 +193,6 @@ class Application(tk.Tk):
             if item_id:
                 vals = router_tree.item(item_id, "values")
                 model_name = vals[0]
-                # Ищем наш Router в self.routers
                 for router in self.routers:
                     if router.model_name == model_name:
                         self.selected_router = router
@@ -174,7 +201,6 @@ class Application(tk.Tk):
         router_tree.bind("<<TreeviewSelect>>", on_router_select)
 
         def on_add_router():
-            """Вспомогательный диалог, чтобы добавить новый роутер."""
             sub = tk.Toplevel(dialog)
             sub.title("Добавить роутер")
 
@@ -197,7 +223,6 @@ class Application(tk.Tk):
                     cost = float(cost_e.get())
                     new_r = Router(model, cap, cost)
                     self.routers.append(new_r)
-                    # Обновим таблицу роутеров
                     router_tree.insert("", tk.END, values=(new_r.model_name, new_r.capacity, new_r.cost))
                     sub.destroy()
                 except ValueError:
@@ -231,10 +256,9 @@ class Application(tk.Tk):
             .grid(row=5, column=0, columnspan=2, pady=10)
 
     # --------------------------------------------------------------------------
-    # Добавление соединения (оставляем без изменений)
+    # Добавление соединения
 
     def add_connection_dialog(self):
-        """Окно для добавления нового соединения между узлами."""
         dialog = tk.Toplevel(self)
         dialog.title("Добавить соединение")
 
@@ -259,9 +283,7 @@ class Application(tk.Tk):
         node2_menu.grid(row=2, column=1, padx=5, pady=5, sticky=tk.W)
 
         def refresh_nodes():
-            """Обновляет список узлов (OptionMenu), если появились новые."""
             n_names = [n.name for n in self.nodes]
-
             menu1 = node1_menu["menu"]
             menu1.delete(0, "end")
             for name in n_names:
@@ -303,7 +325,6 @@ class Application(tk.Tk):
         cable_tree.bind("<<TreeviewSelect>>", on_cable_select)
 
         def on_add_cable():
-            """Вспомогательный диалог для добавления кабеля."""
             sub = tk.Toplevel(dialog)
             sub.title("Добавить кабель")
 
@@ -367,22 +388,16 @@ class Application(tk.Tk):
             .grid(row=6, column=0, columnspan=2, pady=10)
 
     # --------------------------------------------------------------------------
-    # Матрица нагрузки (оставляем без изменений)
+    # Матрица нагрузки
 
     def show_traffic_matrix_dialog(self):
-        """
-        Окно «Матрица нагрузки»:
-         - Отображает self.traffic_matrix.demands
-         - Позволяет добавлять/обновлять записи (src, dst, traffic, packet_size)
-         - Кнопка «Обновить» перечитывает таблицу из памяти
-        """
         dialog = tk.Toplevel(self)
         dialog.title("Матрица нагрузки")
 
         frame_top = ttk.Frame(dialog)
         frame_top.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        columns = ("src", "dst", "traffic", "packet")
+        columns = ("src", "dst", "traffic")
         tree = ttk.Treeview(frame_top, columns=columns, show="headings", height=8)
         for col in columns:
             tree.heading(col, text=col.capitalize())
@@ -392,10 +407,8 @@ class Application(tk.Tk):
         tree.configure(yscroll=scrollbar.set)
         scrollbar.pack(side=tk.LEFT, fill=tk.Y)
 
-        # Заполнение таблицы
         self._fill_traffic_table(tree)
 
-        # Блок добавления новой записи
         frame_bottom = ttk.Frame(dialog)
         frame_bottom.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
 
@@ -418,50 +431,36 @@ class Application(tk.Tk):
         t_entry = tk.Entry(frame_bottom)
         t_entry.grid(row=2, column=1, padx=5, pady=5, sticky=tk.W)
 
-        tk.Label(frame_bottom, text="packet_size:").grid(row=3, column=0, padx=5, pady=5, sticky=tk.E)
-        p_entry = tk.Entry(frame_bottom)
-        p_entry.grid(row=3, column=1, padx=5, pady=5, sticky=tk.W)
-
         def on_add_record():
-            """Добавляем (или обновляем) запись (src, dst) -> (traffic, packet_size)."""
             try:
                 t_val = float(t_entry.get())
-                p_val = float(p_entry.get())
                 src_node = src_var.get()
                 dst_node = dst_var.get()
-                self.traffic_matrix.set_demand(src_node, dst_node, t_val, p_val)
-
-                # Перезаполним таблицу
-                for item in tree.get_children():
-                    tree.delete(item)
-                self._fill_traffic_table(tree)
+                self.traffic_matrix.set_demand(src_node, dst_node, t_val)
+                self._refresh_table(tree)
             except ValueError:
-                messagebox.showerror("Ошибка", "Некорректные значения traffic/packet.")
+                messagebox.showerror("Ошибка", "Некорректное значение traffic.")
 
         ttk.Button(frame_bottom, text="Добавить запись", command=on_add_record)\
-            .grid(row=4, column=0, columnspan=2, pady=5)
+            .grid(row=3, column=0, columnspan=2, pady=5)
 
-        # Кнопка «Обновить»
         def on_refresh():
-            for item in tree.get_children():
-                tree.delete(item)
-            self._fill_traffic_table(tree)
+            self._refresh_table(tree)
 
         ttk.Button(frame_bottom, text="Обновить", command=on_refresh)\
-            .grid(row=4, column=2, padx=20, pady=5)
+            .grid(row=3, column=2, padx=20, pady=5)
 
     def _fill_traffic_table(self, treeview: ttk.Treeview):
-        """Показываем все корректные записи из self.traffic_matrix.demands."""
-        for key, val in self.traffic_matrix.demands.items():
-            # Ожидаем (src, dst) -> (traffic, packet_size)
-            if (isinstance(key, tuple) and len(key) == 2 and
-                isinstance(val, tuple) and len(val) == 2):
-                src, dst = key
-                traffic, packet = val
-                treeview.insert("", tk.END, values=(src, dst, traffic, packet))
+        for (src, dst), traffic in self.traffic_matrix.demands.items():
+            treeview.insert("", tk.END, values=(src, dst, traffic))
+
+    def _refresh_table(self, treeview: ttk.Treeview):
+        for item in treeview.get_children():
+            treeview.delete(item)
+        self._fill_traffic_table(treeview)
 
     # --------------------------------------------------------------------------
-    # Показать узлы (таблица)
+    # Показать узлы (с кнопками Edit / Delete)
 
     def show_nodes_dialog(self):
         dialog = tk.Toplevel(self)
@@ -477,20 +476,115 @@ class Application(tk.Tk):
         tree.configure(yscroll=scrollbar.set)
         scrollbar.pack(side=tk.LEFT, fill=tk.Y)
 
-        # Заполнение
-        for node in self.nodes:
-            vals = (
-                node.name,
-                f"{node.x}",
-                f"{node.y}",
-                node.router.model_name,
-                f"{node.router.capacity}",
-                f"{node.router.cost}",
-            )
-            tree.insert("", tk.END, values=vals)
+        def fill_nodes():
+            for item in tree.get_children():
+                tree.delete(item)
+            for node in self.nodes:
+                vals = (
+                    node.name,
+                    f"{node.x}",
+                    f"{node.y}",
+                    node.router.model_name if node.router else "None",
+                    f"{node.router.capacity}" if node.router else "0",
+                    f"{node.router.cost}" if node.router else "0",
+                )
+                tree.insert("", tk.END, values=vals)
+
+        fill_nodes()
+
+        # Кнопки Edit / Delete сбоку
+        btn_frame = ttk.Frame(dialog)
+        btn_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=5, pady=5)
+
+        def on_edit_node():
+            item_id = tree.focus()
+            if not item_id:
+                messagebox.showerror("Ошибка", "Выберите узел для редактирования.")
+                return
+            vals = tree.item(item_id, "values")
+            old_name = vals[0]
+
+            node_obj = next((n for n in self.nodes if n.name == old_name), None)
+            if not node_obj:
+                messagebox.showerror("Ошибка", "Узел не найден.")
+                return
+
+            # Открываем диалог для редактирования
+            edit_dialog = tk.Toplevel(dialog)
+            edit_dialog.title(f"Редактировать узел {old_name}")
+
+            tk.Label(edit_dialog, text="Название:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.E)
+            name_e = tk.Entry(edit_dialog)
+            name_e.insert(0, node_obj.name)
+            name_e.grid(row=0, column=1, padx=5, pady=5)
+
+            tk.Label(edit_dialog, text="X:").grid(row=1, column=0, padx=5, pady=5, sticky=tk.E)
+            x_e = tk.Entry(edit_dialog)
+            x_e.insert(0, str(node_obj.x))
+            x_e.grid(row=1, column=1, padx=5, pady=5)
+
+            tk.Label(edit_dialog, text="Y:").grid(row=2, column=0, padx=5, pady=5, sticky=tk.E)
+            y_e = tk.Entry(edit_dialog)
+            y_e.insert(0, str(node_obj.y))
+            y_e.grid(row=2, column=1, padx=5, pady=5)
+
+            # Выбор роутера
+            tk.Label(edit_dialog, text="Роутер:").grid(row=3, column=0, padx=5, pady=5, sticky=tk.E)
+            router_combo = ttk.Combobox(edit_dialog, values=[r.model_name for r in self.routers], state="readonly")
+            if node_obj.router:
+                router_combo.set(node_obj.router.model_name)
+            else:
+                router_combo.set("")
+            router_combo.grid(row=3, column=1, padx=5, pady=5)
+
+            def on_save():
+                try:
+                    new_name = name_e.get().strip()
+                    new_x = float(x_e.get())
+                    new_y = float(y_e.get())
+
+                    router_name = router_combo.get()
+                    new_router = next((r for r in self.routers if r.model_name == router_name), None)
+
+                    node_obj.name = new_name
+                    node_obj.x = new_x
+                    node_obj.y = new_y
+                    node_obj.router = new_router
+
+                    # Перерисуем
+                    fill_nodes()
+                    self.draw_centered_grid()
+                    edit_dialog.destroy()
+                except ValueError:
+                    messagebox.showerror("Ошибка", "Некорректные координаты.")
+
+            ttk.Button(edit_dialog, text="Сохранить", command=on_save).grid(row=4, column=0, columnspan=2, pady=10)
+
+        def on_delete_node():
+            item_id = tree.focus()
+            if not item_id:
+                messagebox.showerror("Ошибка", "Выберите узел для удаления.")
+                return
+            vals = tree.item(item_id, "values")
+            node_name = vals[0]
+            node_obj = next((n for n in self.nodes if n.name == node_name), None)
+            if not node_obj:
+                messagebox.showerror("Ошибка", "Узел не найден.")
+                return
+
+            # Удаляем все connections, в которых он участвует
+            self.connections = [c for c in self.connections if c.node1 != node_obj and c.node2 != node_obj]
+            # Удаляем сам узел
+            self.nodes.remove(node_obj)
+
+            fill_nodes()
+            self.draw_centered_grid()
+
+        ttk.Button(btn_frame, text="Edit", command=on_edit_node).pack(pady=5)
+        ttk.Button(btn_frame, text="Delete", command=on_delete_node).pack(pady=5)
 
     # --------------------------------------------------------------------------
-    # Показать соединения (просто список без учёта потока)
+    # Показать соединения (с кнопками Edit / Delete)
 
     def show_connections_dialog(self):
         dialog = tk.Toplevel(self)
@@ -506,22 +600,116 @@ class Application(tk.Tk):
         tree.configure(yscroll=scrollbar.set)
         scrollbar.pack(side=tk.LEFT, fill=tk.Y)
 
-        for conn in self.connections:
-            vals = (
-                conn.name,
-                conn.node1.name,
-                conn.node2.name,
-                conn.cable.cable_name,
-                f"{conn.distance:.2f}",
-                f"{conn.connection_cost:.2f}"
-            )
-            tree.insert("", tk.END, values=vals)
+        def fill_connections():
+            for item in tree.get_children():
+                tree.delete(item)
+            for conn in self.connections:
+                vals = (
+                    conn.name,
+                    conn.node1.name,
+                    conn.node2.name,
+                    conn.cable.cable_name,
+                    f"{conn.distance:.2f}",
+                    f"{conn.connection_cost:.2f}"
+                )
+                tree.insert("", tk.END, values=vals)
+
+        fill_connections()
+
+        btn_frame = ttk.Frame(dialog)
+        btn_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=5, pady=5)
+
+        def on_edit_connection():
+            item_id = tree.focus()
+            if not item_id:
+                messagebox.showerror("Ошибка", "Выберите соединение для редактирования.")
+                return
+            vals = tree.item(item_id, "values")
+            conn_name = vals[0]
+
+            conn_obj = next((c for c in self.connections if c.name == conn_name), None)
+            if not conn_obj:
+                messagebox.showerror("Ошибка", "Соединение не найдено.")
+                return
+
+            edit_dialog = tk.Toplevel(dialog)
+            edit_dialog.title(f"Редактировать соединение {conn_name}")
+
+            tk.Label(edit_dialog, text="Название:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.E)
+            name_e = tk.Entry(edit_dialog)
+            name_e.insert(0, conn_obj.name)
+            name_e.grid(row=0, column=1, padx=5, pady=5)
+
+            tk.Label(edit_dialog, text="Узел 1:").grid(row=1, column=0, padx=5, pady=5, sticky=tk.E)
+            node1_combo = ttk.Combobox(edit_dialog, values=[n.name for n in self.nodes], state="readonly")
+            node1_combo.set(conn_obj.node1.name)
+            node1_combo.grid(row=1, column=1, padx=5, pady=5)
+
+            tk.Label(edit_dialog, text="Узел 2:").grid(row=2, column=0, padx=5, pady=5, sticky=tk.E)
+            node2_combo = ttk.Combobox(edit_dialog, values=[n.name for n in self.nodes], state="readonly")
+            node2_combo.set(conn_obj.node2.name)
+            node2_combo.grid(row=2, column=1, padx=5, pady=5)
+
+            tk.Label(edit_dialog, text="Кабель:").grid(row=3, column=0, padx=5, pady=5, sticky=tk.E)
+            cable_combo = ttk.Combobox(edit_dialog, values=[c.cable_name for c in self.cables], state="readonly")
+            cable_combo.set(conn_obj.cable.cable_name)
+            cable_combo.grid(row=3, column=1, padx=5, pady=5)
+
+            def on_save():
+                new_name = name_e.get().strip()
+                n1_name = node1_combo.get()
+                n2_name = node2_combo.get()
+                cab_name = cable_combo.get()
+
+                if n1_name == n2_name:
+                    messagebox.showerror("Ошибка", "Узел 1 и Узел 2 должны быть разными.")
+                    return
+
+                node1_obj = next((n for n in self.nodes if n.name == n1_name), None)
+                node2_obj = next((n for n in self.nodes if n.name == n2_name), None)
+                cable_obj = next((cb for cb in self.cables if cb.cable_name == cab_name), None)
+
+                if not (node1_obj and node2_obj and cable_obj):
+                    messagebox.showerror("Ошибка", "Неверные узлы или кабель.")
+                    return
+
+                conn_obj.name = new_name
+                conn_obj.node1 = node1_obj
+                conn_obj.node2 = node2_obj
+                conn_obj.cable = cable_obj
+                # Пересчёт дистанции и стоимости
+                conn_obj.distance = conn_obj._calc_distance()
+                conn_obj.connection_cost = conn_obj.distance * cable_obj.cost_per_unit
+
+                fill_connections()
+                self.draw_centered_grid()
+                edit_dialog.destroy()
+
+            ttk.Button(edit_dialog, text="Сохранить", command=on_save).grid(row=4, column=0, columnspan=2, pady=10)
+
+        def on_delete_connection():
+            item_id = tree.focus()
+            if not item_id:
+                messagebox.showerror("Ошибка", "Выберите соединение для удаления.")
+                return
+            vals = tree.item(item_id, "values")
+            conn_name = vals[0]
+            conn_obj = next((c for c in self.connections if c.name == conn_name), None)
+            if not conn_obj:
+                messagebox.showerror("Ошибка", "Соединение не найдено.")
+                return
+
+            self.connections.remove(conn_obj)
+            fill_connections()
+            self.draw_centered_grid()
+
+        ttk.Button(btn_frame, text="Edit", command=on_edit_connection).pack(pady=5)
+        ttk.Button(btn_frame, text="Delete", command=on_delete_connection).pack(pady=5)
 
     # --------------------------------------------------------------------------
-    # Кратчайшие пути (оставляем без изменений)
+    # Кратчайшие пути
 
     def show_shortest_paths_dialog(self):
-        from logic import calculate_all_shortest_paths
         paths_dict = calculate_all_shortest_paths(self.nodes, self.connections)
 
         dialog = tk.Toplevel(self)
@@ -539,14 +727,9 @@ class Application(tk.Tk):
                 row_idx += 1
 
     # --------------------------------------------------------------------------
-    # Показать потоки на каналах
+    # Показать потоки на каналах (с учетом новой формулы задержки)
 
     def show_data_flows_dialog(self):
-        """
-        Показываем суммарный поток (flow) на каждом канале (соединении),
-        используя compute_flows_on_connections.
-        """
-        from logic import compute_flows_on_connections
         dialog = tk.Toplevel(self)
         dialog.title("Потоки по соединениям")
 
@@ -560,21 +743,34 @@ class Application(tk.Tk):
         tree.configure(yscroll=scrollbar.set)
         scrollbar.pack(side=tk.LEFT, fill=tk.Y)
 
-        conn_data = compute_flows_on_connections(self.nodes, self.connections, self.traffic_matrix)
+        # Считаем flow + packet (глобальный)
+        conn_data = compute_flows_on_connections(
+            self.nodes, self.connections, self.traffic_matrix, self.global_packet_size
+        )
+
+        delays_list = []
+
         for conn, info in conn_data.items():
             flow = info["flow"]
-            packet_size = info["packet"]
+            packet_size = info["packet"]  # это наш global_packet_size
             capacity = conn.cable.capacity
 
             if flow >= capacity:
                 delay_str = "∞"
+                delay_val = float('inf')
             else:
-                gap = capacity - flow
-                if gap <= 0:
+                # Новая формула задержки: packet_size / (capacity - flow)
+                denom = capacity - flow
+                if denom <= 0:
                     delay_str = "∞"
+                    delay_val = float('inf')
                 else:
-                    delay = packet_size * (1.0 / gap)
-                    delay_str = f"{delay:.4f}"
+                    delay_val = packet_size / denom
+                    delay_str = f"{delay_val:.4f}"
+
+            # Сохраняем значение для последующего усреднения (если не infinity)
+            if delay_val != float('inf'):
+                delays_list.append(delay_val)
 
             vals = (
                 conn.node1.name,
@@ -586,65 +782,56 @@ class Application(tk.Tk):
             )
             tree.insert("", tk.END, values=vals)
 
-        # Добавим отладочную информацию
-        print("Потоки по соединениям:")
-        for conn, info in conn_data.items():
-            print(f"{conn.node1.name} - {conn.node2.name}: Flow={info['flow']}, Packet={info['packet']}, Capacity={conn.cable.capacity}, Delay={delay_str}")
+        # Добавляем метку «Средняя задержка» — снизу
+        avg_frame = ttk.Frame(dialog)
+        avg_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=10)
+
+        if delays_list:
+            avg_delay = sum(delays_list) / len(delays_list)
+            tk.Label(avg_frame, text=f"Средняя задержка (по конечным значениям): {avg_delay:.4f}")\
+              .pack(side=tk.LEFT, padx=5)
+        else:
+            tk.Label(avg_frame, text="Нет конечных значений задержки (все ∞?)")\
+              .pack(side=tk.LEFT, padx=5)
 
     # --------------------------------------------------------------------------
     # Поиск минимального роутера/кабеля и подсчёт сумм
 
     def compute_min_resources(self):
-        from logic import find_min_router_per_node, find_min_cable, sum_router_costs, sum_cable_costs
-
         try:
-            # Находим минимальные роутеры для каждого узла
             min_routers = find_min_router_per_node(self.nodes, self.routers, self.traffic_matrix)
-
-            # Находим минимальный кабель для общей нагрузки
             min_cable = find_min_cable(self.cables, self.traffic_matrix)
 
-            # Подсчитываем сумму всех цен роутеров
             total_router_cost = sum(
                 router.cost for router in min_routers.values() if router is not None
             )
-
-            # Подсчитываем сумму всех цен кабелей
             total_cable_cost = sum_cable_costs(self.connections)
 
-            # Собираем информацию для отображения
             msg = "Минимальные роутеры по узлам:\n"
             for node_name, router in min_routers.items():
                 if router:
                     msg += f" - {node_name}: {router.model_name} (capacity={router.capacity}, cost={router.cost})\n"
                 else:
                     msg += f" - {node_name}: Нет подходящего роутера.\n"
-
             msg += "\n"
 
             if min_cable:
                 msg += f"Минимальный кабель: {min_cable.cable_name}, capacity={min_cable.capacity}, cost_per_unit={min_cable.cost_per_unit}\n"
             else:
                 msg += "Нет подходящего кабеля.\n"
-
             msg += "\n"
 
-            msg += f"Сумма всех цен роутеров: {total_router_cost:.2f}\n"
-            msg += f"Сумма всех цен кабелей: {total_cable_cost:.2f}\n"
+            msg += f"Сумма всех цен роутеров (min вариант): {total_router_cost:.2f}\n"
+            msg += f"Сумма всех цен кабелей (текущая сеть): {total_cable_cost:.2f}\n"
 
-            # Показываем сообщение
             messagebox.showinfo("Результат", msg)
         except Exception as e:
             messagebox.showerror("Ошибка", f"Произошла ошибка при вычислении минимальных ресурсов:\n{e}")
 
     # --------------------------------------------------------------------------
-    # Сохранение и загрузка (оставляем без изменений)
+    # Сохранение и загрузка
 
     def save_data(self):
-        """
-        Сохраняем узлы, соединения, роутеры, кабели и полный traffic_matrix
-        (ничего не удаляя) в один JSON-файл.
-        """
         filename = filedialog.asksaveasfilename(defaultextension=".json")
         if filename:
             try:
@@ -656,15 +843,11 @@ class Application(tk.Tk):
                     self.traffic_matrix,
                     self.cables
                 )
-                messagebox.showinfo("Сохранение", "Все данные (включая матрицу нагрузки) успешно сохранены.")
+                messagebox.showinfo("Сохранение", "Все данные успешно сохранены.")
             except Exception as e:
                 messagebox.showerror("Ошибка при сохранении", str(e))
 
     def load_data(self):
-        """
-        Загружаем все данные (включая матрицу нагрузок).
-        После загрузки ничего не вырезается из матрицы.
-        """
         filename = filedialog.askopenfilename(filetypes=[("JSON Files", "*.json")])
         if not filename:
             return
@@ -676,18 +859,12 @@ class Application(tk.Tk):
             self.traffic_matrix = data["traffic_matrix"]
             self.cables = data.get("cables", [])
 
-            # Перерисовываем Canvas
             self.draw_centered_grid()
-
-            messagebox.showinfo("Загрузка", "Все данные (включая матрицу нагрузки) успешно загружены.")
+            messagebox.showinfo("Загрузка", "Все данные успешно загружены.")
         except Exception as e:
             messagebox.showerror("Ошибка при загрузке", str(e))
 
 # --------------------------------------------------------------------------
-# Показать потоки на каналах (добавляем отладочную информацию)
-
-# Остальные методы остаются без изменений
-
 def apply_dark_theme(root):
     """Применяет тёмную тему к приложению."""
     root.configure(bg="#121212")  # Очень тёмный фон
@@ -697,31 +874,21 @@ def apply_dark_theme(root):
     # Настройка кнопок
     style.configure(
         "TButton",
-        background="#1E1E1E",  # Тёмно-серый фон
-        foreground="#E0E0E0",  # Светло-серый текст
+        background="#1E1E1E",
+        foreground="#E0E0E0",
         font=("Arial", 11),
         borderwidth=1,
         focuscolor="none",
     )
     style.map(
         "TButton",
-        background=[("active", "#333333")],  # Более светлый серый при наведении
-        foreground=[("active", "#FFFFFF")],  # Белый текст при наведении
+        background=[("active", "#333333")],
+        foreground=[("active", "#FFFFFF")],
     )
 
-    # Настройка рамок (Frame)
-    style.configure(
-        "TFrame",
-        background="#121212",  # Фон совпадает с главным окном
-    )
-
-    # Настройка меток (Label)
-    style.configure(
-        "TLabel",
-        background="#121212",
-        foreground="#E0E0E0",  # Светлый текст
-        font=("Arial", 11),
-    )
+    # Настройка рамок (Frame) и меток (Label)
+    style.configure("TFrame", background="#121212")
+    style.configure("TLabel", background="#121212", foreground="#E0E0E0", font=("Arial", 11))
 
     # Настройка таблиц (Treeview)
     style.configure(
@@ -737,7 +904,7 @@ def apply_dark_theme(root):
         foreground=[("selected", "#FFFFFF")],
     )
 
-    # Настройка полос прокрутки (Scrollbar)
+    # Полосы прокрутки
     style.configure(
         "Vertical.TScrollbar",
         background="#1E1E1E",
@@ -751,8 +918,7 @@ def apply_dark_theme(root):
         arrowcolor="#E0E0E0",
     )
 
-
 if __name__ == "__main__":
     app = Application()
-    apply_dark_theme(app)  # Применяем тёмную тему
+    apply_dark_theme(app)  # Тёмная тема (необязательно)
     app.mainloop()

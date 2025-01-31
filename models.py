@@ -26,7 +26,7 @@ class Node:
         self.router = router
 
     def __repr__(self):
-        return f"Node({self.name}, x={self.x}, y={self.y}, router={self.router.model_name})"
+        return f"Node({self.name}, x={self.x}, y={self.y}, router={self.router.model_name if self.router else None})"
 
 
 class Cable:
@@ -59,18 +59,20 @@ class Connection:
 
 
 class TrafficMatrix:
-    """Класс для представления матрицы нагрузки."""
-    def __init__(self):
-        # Ожидаемый формат: {(src_name, dst_name): (traffic, packet_size)}
-        self.demands = {}
+    """Класс для представления матрицы нагрузки.
 
-    def set_demand(self, source: str, target: str, traffic: float, packet_size: float):
-        if traffic < 0 or packet_size < 0:
-            raise ValueError("Нельзя использовать отрицательные значения.")
-        self.demands[(source, target)] = (traffic, packet_size)
+       Теперь храним только { (src, dst): traffic }.
+    """
+    def __init__(self):
+        self.demands = {}  # {(src_name, dst_name): traffic}
+
+    def set_demand(self, source: str, target: str, traffic: float):
+        if traffic < 0:
+            raise ValueError("Нельзя использовать отрицательные значения traffic.")
+        self.demands[(source, target)] = traffic
 
     def get_demand(self, source: str, target: str):
-        return self.demands.get((source, target), (0.0, 0.0))
+        return self.demands.get((source, target), 0.0)
 
     def __repr__(self):
         return f"TrafficMatrix({self.demands})"

@@ -1,5 +1,3 @@
-# logic.py
-
 import heapq
 import json
 from typing import List, Dict, Tuple
@@ -81,42 +79,36 @@ def calculate_data_flows(paths_dict: Dict[str, Dict[str, List[str]]],
                          traffic_matrix: TrafficMatrix) -> List[Tuple[str, str, float]]:
     """
     Простой расчёт потоков. Возвращаем список (src, dst, traffic).
-    Здесь главное - корректно обойти traffic_matrix.demands.
+
+    Теперь в матрице нагрузки нет packet_size — только traffic.
     """
     flows = []
 
-    # Проверяем формат данных в demands
-    for key, val in traffic_matrix.demands.items():
-        # Ожидаем, что key = (src, dst), val = (traffic, packet_size)
-        if (isinstance(key, tuple) and len(key) == 2 and
-            isinstance(val, tuple) and len(val) == 2):
+    for key, traffic in traffic_matrix.demands.items():
+        # key = (src, dst), val = traffic
+        if isinstance(key, tuple) and len(key) == 2:
             src, dst = key
-            traffic, packet_size = val
-
             # Проверяем, есть ли путь
             if src in paths_dict and dst in paths_dict[src]:
                 path = paths_dict[src][dst]
                 if path:  # если путь не пуст
                     flows.append((src, dst, traffic))
-        else:
-            # Если ключ/значение не соответствуют формату — пропустим
-            pass
-
     return flows
 
 def compute_flows_on_connections(nodes: List[Node],
                                  connections: List[Connection],
-                                 traffic_matrix: TrafficMatrix) -> Dict[Connection, Dict[str, float]]:
+                                 traffic_matrix: TrafficMatrix,
+                                 global_packet_size: float) -> Dict[Connection, Dict[str, float]]:
     """
     Для каждого соединения считаем:
       - Суммарный трафик, проходящий через него (flow)
-      - Максимальный packet_size (packet) среди всех потоков, которые идут через это соединение
+      - packet_size — берём из глобального параметра (одно на всю сеть)
 
     Возвращаем словарь:
       {
         conn: {
-           "flow": float,
-           "packet": float
+           "flow": float,       # общий трафик на этом канале
+           "packet": float      # в данном случае = global_packet_size
         },
         ...
       }
@@ -137,12 +129,9 @@ def compute_flows_on_connections(nodes: List[Node],
         conn_map[key] = conn
 
     # 4) Идём по каждой записи матрицы нагрузки
-    for key, val in traffic_matrix.demands.items():
-        if (isinstance(key, tuple) and len(key) == 2 and
-            isinstance(val, tuple) and len(val) == 2):
+    for key, traffic in traffic_matrix.demands.items():
+        if isinstance(key, tuple) and len(key) == 2:
             src, dst = key
-            traffic, packet_size = val
-
             path = paths_dict.get(src, {}).get(dst, [])
             for i in range(len(path) - 1):
                 n1, n2 = path[i], path[i+1]
@@ -150,8 +139,8 @@ def compute_flows_on_connections(nodes: List[Node],
                 if ckey in conn_map:
                     c = conn_map[ckey]
                     result[c]["flow"] += traffic
-                    if packet_size > result[c]["packet"]:
-                        result[c]["packet"] = packet_size
+                    # packet_size для всего один
+                    result[c]["packet"] = global_packet_size
 
     return result
 
@@ -161,13 +150,7 @@ def find_min_router(routers: List[Router], traffic_matrix: TrafficMatrix):
     Из таких - выбираем роутер с минимальной cost.
     Возвращаем None, если не нашли.
     """
-    total_traffic = 0.0
-    for key, val in traffic_matrix.demands.items():
-        if (isinstance(key, tuple) and len(key) == 2 and
-            isinstance(val, tuple) and len(val) == 2):
-            traffic, _ = val
-            total_traffic += traffic
-
+    total_traffic = sum(traffic_matrix.demands.values())
     feasible_routers = [r for r in routers if r.capacity >= total_traffic]
     if feasible_routers:
         return min(feasible_routers, key=lambda r: r.cost)
@@ -175,27 +158,21 @@ def find_min_router(routers: List[Router], traffic_matrix: TrafficMatrix):
 
 def find_min_router_per_node(nodes: List[Node], routers: List[Router], traffic_matrix: TrafficMatrix) -> Dict[str, Router]:
     """
-    Для каждого узла находит минимальный по стоимости роутер, который может обработать исходящий трафик этого узла.
-
-    :param nodes: Список узлов.
-    :param routers: Список доступных роутеров.
-    :param traffic_matrix: Объект TrafficMatrix с нагрузками.
-    :return: Словарь {node_name: Router}.
+    Для каждого узла находит минимальный по стоимости роутер, который может обработать
+    исходящий трафик этого узла.
     """
     node_traffic = {node.name: 0.0 for node in nodes}
 
     # Считаем суммарный исходящий трафик для каждого узла
-    for (src, dst), (traffic, _) in traffic_matrix.demands.items():
+    for (src, dst), traffic in traffic_matrix.demands.items():
         if src in node_traffic:
             node_traffic[src] += traffic
 
-    # Для каждого узла выбираем минимальный по стоимости роутер, способный обработать его нагрузку
     min_routers = {}
     for node in nodes:
         traffic = node_traffic.get(node.name, 0.0)
         feasible_routers = [r for r in routers if r.capacity >= traffic]
         if feasible_routers:
-            # Выбираем роутер с минимальной стоимостью
             min_router = min(feasible_routers, key=lambda r: r.cost)
             min_routers[node.name] = min_router
         else:
@@ -208,13 +185,7 @@ def find_min_cable(cables: List[Cable], traffic_matrix: TrafficMatrix):
     Аналогично для кабеля: ищем кабель, у которого capacity >= total_traffic.
     Из подходящих - выбираем тот, у которого cost_per_unit минимален.
     """
-    total_traffic = 0.0
-    for key, val in traffic_matrix.demands.items():
-        if (isinstance(key, tuple) and len(key) == 2 and
-            isinstance(val, tuple) and len(val) == 2):
-            traffic, _ = val
-            total_traffic += traffic
-
+    total_traffic = sum(traffic_matrix.demands.values())
     feasible_cables = [c for c in cables if c.capacity >= total_traffic]
     if feasible_cables:
         return min(feasible_cables, key=lambda c: c.cost_per_unit)
@@ -223,18 +194,12 @@ def find_min_cable(cables: List[Cable], traffic_matrix: TrafficMatrix):
 def sum_router_costs(nodes: List[Node]) -> float:
     """
     Считает сумму цен роутеров, установленных на узлах.
-
-    :param nodes: Список узлов.
-    :return: Сумма цен роутеров.
     """
     return sum(node.router.cost for node in nodes if node.router is not None)
 
 def sum_cable_costs(connections: List[Connection]) -> float:
     """
     Считает сумму цен всех кабелей в соединениях.
-
-    :param connections: Список соединений.
-    :return: Сумма цен кабелей.
     """
     return sum(conn.connection_cost for conn in connections)
 
@@ -281,15 +246,15 @@ def save_data_to_file(filename, routers: List[Router], nodes: List[Node],
             }
             for cab in cables
         ],
-        # Сериализуем traffic_matrix.demands как список словарей
+        # Теперь в traffic_matrix.demands храним только traffic
+        # Сериализуем как список словарей
         "traffic_matrix": [
             {
                 "src": src,
                 "dst": dst,
-                "traffic": traffic,
-                "packet_size": packet_size
+                "traffic": traffic
             }
-            for (src, dst), (traffic, packet_size) in traffic_matrix.demands.items()
+            for (src, dst), traffic in traffic_matrix.demands.items()
         ]
     }
 
@@ -327,12 +292,8 @@ def load_data_from_file(filename):
         name = n_dict["name"]
 
         router_name = n_dict["router_model_name"]
-        # Находим сам Router (по имени) в списке routers
         found_router = next((r for r in routers if r.model_name == router_name), None)
-        if router_name and not found_router:
-            raise ValueError(f"Router with model name '{router_name}' not found for node '{name}'.")
 
-        # Создаём Node
         node_obj = Node(x, y, name, found_router)
         nodes.append(node_obj)
 
@@ -346,7 +307,6 @@ def load_data_from_file(filename):
         distance = c_dict["distance"]
         connection_cost = c_dict["connection_cost"]
 
-        # Находим объекты node1, node2 и cable
         node1_obj = next((n for n in nodes if n.name == node1_name), None)
         node2_obj = next((n for n in nodes if n.name == node2_name), None)
         cable_obj = next((c for c in cables if c.cable_name == cable_name), None)
@@ -366,8 +326,7 @@ def load_data_from_file(filename):
         src = row["src"]
         dst = row["dst"]
         traffic = row["traffic"]
-        packet_size = row["packet_size"]
-        traffic_matrix.set_demand(src, dst, traffic, packet_size)
+        traffic_matrix.set_demand(src, dst, traffic)
 
     return {
         "routers": routers,
