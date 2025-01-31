@@ -1,0 +1,110 @@
+{
+    "routers": [
+        {
+            "model_name": "testNode",
+            "capacity": 9999999,
+            "cost": 100
+        }
+    ],
+    "nodes": [
+        {
+            "name": "first",
+            "x": 3.0,
+            "y": 5.0,
+            "router_model_name": "testNode"
+        },
+        {
+            "name": "second",
+            "x": 5.0,
+            "y": 20.0,
+            "router_model_name": "testNode"
+        },
+        {
+            "name": "third",
+            "x": 5.0,
+            "y": 40.0,
+            "router_model_name": "testNode"
+        },
+        {
+            "name": "fouth",
+            "x": 60.0,
+            "y": 70.0,
+            "router_model_name": "testNode"
+        },
+        {
+            "name": "fifth",
+            "x": 50.0,
+            "y": 4.0,
+            "router_model_name": "testNode"
+        },
+        {
+            "name": "sixth",
+            "x": 40.0,
+            "y": 40.0,
+            "router_model_name": "testNode"
+        }
+    ],
+    "connections": [
+        {
+            "name": "1",
+            "node1": "first",
+            "node2": "second",
+            "cable_name": "HighSpeedCable",
+            "distance": 15.132745950421556,
+            "connection_cost": 30.265491900843113
+        },
+        {
+            "name": "2",
+            "node1": "first",
+            "node2": "fifth",
+            "cable_name": "HighSpeedCable",
+            "distance": 47.01063709417264,
+            "connection_cost": 94.02127418834527
+        },
+        {
+            "name": "3",
+            "node1": "second",
+            "node2": "sixth",
+            "cable_name": "HighSpeedCable",
+            "distance": 40.311288741492746,
+            "connection_cost": 80.62257748298549
+        },
+        {
+            "name": "4",
+            "node1": "second",
+            "node2": "third",
+            "cable_name": "HighSpeedCable",
+            "distance": 20.0,
+            "connection_cost": 40.0
+        },
+        {
+            "name": "5",
+            "node1": "third",
+            "node2": "fouth",
+            "cable_name": "HighSpeedCable",
+            "distance": 62.64982043070834,
+            "connection_cost": 125.29964086141668
+        },
+        {
+            "name": "6",
+            "node1": "sixth",
+            "node2": "fouth",
+            "cable_name": "HighSpeedCable",
+            "distance": 36.05551275463989,
+            "connection_cost": 72.11102550927978
+        }
+    ],
+    "cables": [
+        {
+            "cable_name": "DefaultCable",
+            "cost_per_unit": 1.0,
+            "capacity": 1000
+        },
+        {
+            "cable_name": "HighSpeedCable",
+            "cost_per_unit": 2.0,
+            "capacity": 10000
+        }
+    ],
+    "traffic_matrix": []
+}

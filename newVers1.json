@@ -1,0 +1,53 @@
+{
+    "routers": [
+        {
+            "model_name": "testNode",
+            "capacity": 9999999,
+            "cost": 100
+        }
+    ],
+    "nodes": [
+        {
+            "name": "first",
+            "x": 1.0,
+            "y": 5.0,
+            "router_model_name": "testNode"
+        },
+        {
+            "name": "second",
+            "x": 50.0,
+            "y": 4.0,
+            "router_model_name": "testNode"
+        }
+    ],
+    "connections": [
+        {
+            "name": "fdsf",
+            "node1": "first",
+            "node2": "second",
+            "cable_name": "HighSpeedCable",
+            "distance": 49.01020301937138,
+            "connection_cost": 98.02040603874276
+        }
+    ],
+    "cables": [
+        {
+            "cable_name": "DefaultCable",
+            "cost_per_unit": 1.0,
+            "capacity": 1000
+        },
+        {
+            "cable_name": "HighSpeedCable",
+            "cost_per_unit": 2.0,
+            "capacity": 10000
+        }
+    ],
+    "traffic_matrix": [
+        {
+            "src": "first",
+            "dst": "second",
+            "traffic": 400.0,
+            "packet_size": 40.0
+        }
+    ]
+}
